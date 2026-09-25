@@ -375,6 +375,39 @@ main{max-width:1000px;margin:0 auto;padding:20px 16px 60px;}
   color:var(--blue);
   padding:10px 0;
 }
+.edit-panel-hint{
+  margin:0 0 16px;
+  font-size:12px;
+  color:var(--muted);
+}
+.day-form-section{
+  padding:16px 0;
+  border-top:1px solid var(--border);
+}
+.day-form-section:first-of-type{border-top:none;padding-top:0;}
+.day-form-section-header{
+  display:flex;
+  align-items:baseline;
+  gap:8px;
+  margin-bottom:10px;
+}
+.day-form-section-header h4{
+  margin:0;
+  font-size:13px;
+  font-weight:800;
+  letter-spacing:.8px;
+  color:var(--navy);
+}
+.day-form-section-date{
+  font-size:11px;
+  color:var(--muted);
+}
+.day-form-section--filled .day-form-section-header h4::after{
+  content:"✓";
+  margin-left:6px;
+  color:var(--accent);
+  font-weight:700;
+}
 
 .no-data-inline{
   background:#fff;
@@ -970,6 +1003,11 @@ function renderDayPanel(dayId) {
   const record = DATA[dayId];
   const panel = document.getElementById(`panel-${dayId}`);
 
+  // preserve whether the edit panel was already expanded, so saving doesn't
+  // suddenly collapse it on the person mid-input
+  const prevDetails = panel.querySelector('.edit-panel');
+  const wasOpen = prevDetails ? prevDetails.open : !record;
+
   // days to chart: Day 1 .. selected day, only those that already have data
   const visibleDays = DAYS.slice(0, dayIndex + 1).filter(d => DATA[d.id]);
   const chartLabels = visibleDays.map(d => d.label);
@@ -992,28 +1030,24 @@ function renderDayPanel(dayId) {
     ${record ? metricStripHtml(record, dayInfo.label.toUpperCase()) : ''}
     ${record ? photoStripHtml(dayId, record) : ''}
 
-    <details class="edit-panel" ${record ? '' : 'open'}>
+    <details class="edit-panel" ${wasOpen ? 'open' : ''}>
       <summary>${record ? 'EDIT' : 'INPUT'} ${dayInfo.label} DATA</summary>
       <div class="form-box">
-        <form id="form-${dayId}" novalidate>
-          <div class="form-grid">
-            ${FIELDS.map(f => fieldHtml(dayId, f, record)).join('')}
-          </div>
-          <div class="form-actions">
-            <button type="submit" class="btn btn-primary">SAVE DATA</button>
-          </div>
-        </form>
+        <p class="edit-panel-hint">Isi atau ubah data untuk Day 1–4 di satu tempat ini, tidak perlu pindah tab.</p>
+        ${DAYS.map(d => dayFormSectionHtml(dayId, d)).join('')}
       </div>
     </details>`;
 
-  document.getElementById(`form-${dayId}`).addEventListener('submit', (e) => {
-    e.preventDefault();
-    handleSave(dayId);
-  });
-
-  FIELDS.forEach(f => {
-    const input = document.getElementById(`${dayId}-${f.key}`);
-    input.addEventListener('input', () => validateField(input));
+  DAYS.forEach(d => {
+    const scope = `${dayId}-edit-${d.id}`;
+    document.getElementById(`form-${scope}`).addEventListener('submit', (e) => {
+      e.preventDefault();
+      handleSave(scope, d.id);
+    });
+    FIELDS.forEach(f => {
+      const input = document.getElementById(`${scope}-${f.key}`);
+      input.addEventListener('input', () => validateField(input));
+    });
   });
 
   if (visibleDays.length > 0) {
@@ -1029,14 +1063,39 @@ function renderDayPanel(dayId) {
   }
 }
 
-function fieldHtml(dayId, field, record) {
+/** One collapsible day-section (its own mini form + its own Save button)
+ *  inside the combined "EDIT DAY X DATA" panel. panelDayId is which tab's
+ *  panel this section is being rendered into (so element IDs stay unique
+ *  across the four tabs); targetDay is which day's data this section edits. */
+function dayFormSectionHtml(panelDayId, targetDay) {
+  const rec = DATA[targetDay.id];
+  const scope = `${panelDayId}-edit-${targetDay.id}`;
+  const filled = rec ? 'day-form-section--filled' : '';
+  return `
+    <div class="day-form-section ${filled}">
+      <div class="day-form-section-header">
+        <h4>${targetDay.label}</h4>
+        <span class="day-form-section-date">${targetDay.dateLabel}</span>
+      </div>
+      <form id="form-${scope}" novalidate>
+        <div class="form-grid">
+          ${FIELDS.map(f => fieldHtml(scope, f, rec)).join('')}
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary">SAVE ${targetDay.label} DATA</button>
+        </div>
+      </form>
+    </div>`;
+}
+
+function fieldHtml(scope, field, record) {
   const val = record ? record[field.key] : '';
   return `
     <div class="field">
-      <label for="${dayId}-${field.key}">${field.label}</label>
+      <label for="${scope}-${field.key}">${field.label}</label>
       <input type="number" min="0" step="1" inputmode="numeric"
-             id="${dayId}-${field.key}" value="${val}" placeholder="0">
-      <span class="error" id="${dayId}-${field.key}-error"></span>
+             id="${scope}-${field.key}" value="${val}" placeholder="0">
+      <span class="error" id="${scope}-${field.key}-error"></span>
     </div>`;
 }
 
@@ -1057,12 +1116,14 @@ function validateField(input) {
   return msg === '';
 }
 
-function handleSave(dayId) {
+/** scope = which rendered form to read inputs from (e.g. "day4-edit-day2");
+ *  targetDayId = which day in DATA this save actually writes to (e.g. "day2"). */
+function handleSave(scope, targetDayId) {
   let allValid = true;
   const record = {};
 
   FIELDS.forEach(f => {
-    const input = document.getElementById(`${dayId}-${f.key}`);
+    const input = document.getElementById(`${scope}-${f.key}`);
     if (!validateField(input)) allValid = false;
     const raw = input.value.trim();
     record[f.key] = raw === '' ? 0 : Math.floor(Number(raw));
@@ -1074,15 +1135,19 @@ function handleSave(dayId) {
   }
 
   // keep any existing photos attached to this day instead of wiping them
-  record.photos = (DATA[dayId] && DATA[dayId].photos) || [null, null, null];
+  record.photos = (DATA[targetDayId] && DATA[targetDayId].photos) || [null, null, null];
 
-  DATA[dayId] = record;
+  DATA[targetDayId] = record;
   clearDemoFlag();
   saveData(DATA);
-  saveDayToFirestore(dayId);
-  showToast(`${DAYS.find(d => d.id === dayId).label} data saved`);
+  saveDayToFirestore(targetDayId);
+  showToast(`${DAYS.find(d => d.id === targetDayId).label} data saved`);
 
-  renderDayPanel(dayId);
+  // re-render whichever day-tab panel is currently visible (its combined
+  // form covers all 4 days, so it needs a refresh no matter which day was
+  // just saved), plus TODAY and SUMMARY since totals/charts may have changed.
+  const activeTab = document.querySelector('.tab-btn.active')?.dataset.tab;
+  if (activeTab && DAYS.some(d => d.id === activeTab)) renderDayPanel(activeTab);
   renderToday();
   renderSummary();
 }
