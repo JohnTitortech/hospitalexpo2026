@@ -57,8 +57,8 @@ const COLOR_PREV = '#c9d6e0';
    2. Buat preset baru, set Signing Mode = "Unsigned"
    3. Isi CLOUD_NAME (nama akun Cloudinary) dan UPLOAD_PRESET (nama preset)
    Tidak butuh backend/API secret sama sekali untuk upload (unsigned). */
-const CLOUDINARY_CLOUD_NAME = 'YOUR_CLOUD_NAME';
-const CLOUDINARY_UPLOAD_PRESET = 'YOUR_UPLOAD_PRESET';
+const CLOUDINARY_CLOUD_NAME = 'dr9ub0xal';
+const CLOUDINARY_UPLOAD_PRESET = 'booth_photos';
 const CLOUDINARY_FOLDER = 'iihe2026-booth-photos';
 
 /* ---------------- FIREBASE (Firestore) — hanya untuk sinkronisasi URL foto ----------------
