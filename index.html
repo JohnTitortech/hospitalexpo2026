@@ -672,6 +672,73 @@ async function savePhotosToFirestore(dayId) {
   }
 }
 
+const DATA_COLLECTION = 'BOOTH_DATA'; // 1 doc per day, doc id = dayId, fields: visitor, ig, tiktok, fb, buyer, challenge
+
+/** Pulls saved metric numbers from Firestore into DATA (called once on boot).
+ *  If any remote data is found it overrides local demo/blank data and is
+ *  re-cached into localStorage so other code paths keep working offline. */
+async function loadDataFromFirestore() {
+  if (!FIREBASE_OK) return;
+  try {
+    const snap = await db.collection(DATA_COLLECTION).get();
+    let hasRemote = false;
+    snap.forEach(doc => {
+      const dayId = doc.id;
+      if (!DAYS.some(d => d.id === dayId)) return;
+      const d = doc.data();
+      const photos = (DATA[dayId] && DATA[dayId].photos) || [null, null, null];
+      DATA[dayId] = {
+        visitor: Number(d.visitor) || 0,
+        ig: Number(d.ig) || 0,
+        tiktok: Number(d.tiktok) || 0,
+        fb: Number(d.fb) || 0,
+        buyer: Number(d.buyer) || 0,
+        challenge: Number(d.challenge) || 0,
+        photos,
+      };
+      hasRemote = true;
+    });
+    if (hasRemote) {
+      clearDemoFlag();
+      saveData(DATA);
+    }
+  } catch (err) {
+    console.error('Gagal memuat data dari Firestore:', err);
+  }
+}
+
+/** Pushes DATA[dayId]'s metric numbers to Firestore so other devices see it too. */
+async function saveDayToFirestore(dayId) {
+  if (!FIREBASE_OK) return;
+  try {
+    const r = DATA[dayId];
+    if (!r) return;
+    await db.collection(DATA_COLLECTION).doc(dayId).set({
+      visitor: r.visitor, ig: r.ig, tiktok: r.tiktok,
+      fb: r.fb, buyer: r.buyer, challenge: r.challenge,
+    }, { merge: true });
+  } catch (err) {
+    console.error('Gagal menyimpan data ke Firestore:', err);
+    showToast('Data tersimpan lokal, tapi gagal sync ke Firestore');
+  }
+}
+
+/** Deletes every day's doc in both Firestore collections (used by Reset). */
+async function clearFirestoreData() {
+  if (!FIREBASE_OK) return;
+  try {
+    const batch = db.batch();
+    DAYS.forEach(d => {
+      batch.delete(db.collection(DATA_COLLECTION).doc(d.id));
+      batch.delete(db.collection(PHOTOS_COLLECTION).doc(d.id));
+    });
+    await batch.commit();
+  } catch (err) {
+    console.error('Gagal menghapus data di Firestore:', err);
+    showToast('Reset lokal berhasil, tapi gagal hapus data di Firestore');
+  }
+}
+
 /* ---------------- DATA LAYER ---------------- */
 
 function loadData() {
@@ -1006,9 +1073,13 @@ function handleSave(dayId) {
     return;
   }
 
+  // keep any existing photos attached to this day instead of wiping them
+  record.photos = (DATA[dayId] && DATA[dayId].photos) || [null, null, null];
+
   DATA[dayId] = record;
   clearDemoFlag();
   saveData(DATA);
+  saveDayToFirestore(dayId);
   showToast(`${DAYS.find(d => d.id === dayId).label} data saved`);
 
   renderDayPanel(dayId);
@@ -1361,6 +1432,7 @@ function parseCSV(text) {
 
 function applyImportedData(imported) {
   const validDayIds = DAYS.map(d => d.id);
+  const importedIds = [];
   let count = 0;
   validDayIds.forEach(id => {
     const r = imported[id];
@@ -1370,7 +1442,10 @@ function applyImportedData(imported) {
       const num = Number(r[f.key]);
       clean[f.key] = Number.isFinite(num) && num >= 0 ? Math.floor(num) : 0;
     });
+    // keep any existing photos attached to this day instead of wiping them
+    clean.photos = (DATA[id] && DATA[id].photos) || [null, null, null];
     DATA[id] = clean;
+    importedIds.push(id);
     count++;
   });
 
@@ -1381,6 +1456,7 @@ function applyImportedData(imported) {
 
   clearDemoFlag();
   saveData(DATA);
+  importedIds.forEach(id => saveDayToFirestore(id));
   renderAll();
   showToast(`Import berhasil (${count} hari)`);
 }
@@ -1390,6 +1466,7 @@ function resetAllData() {
   localStorage.removeItem(DEMO_FLAG_KEY);
   DATA = { day1: null, day2: null, day3: null, day4: null };
   saveData(DATA);
+  clearFirestoreData();
   renderAll();
   showToast('Semua data telah direset');
 }
@@ -1436,6 +1513,7 @@ async function init() {
   showLibWarningIfNeeded();
   setupTabs();
   await loadPhotosFromFirestore();
+  await loadDataFromFirestore();
   renderAll();
 
   document.getElementById('btnExport').addEventListener('click', exportCSV);
