@@ -128,7 +128,7 @@ main{max-width:1000px;margin:0 auto;padding:20px 16px 60px;}
 <!-- Firebase (Firestore) — hanya untuk sinkronisasi data & URL foto antar device -->
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
-<!-- Chart.js + datalabels (sebelumnya di-inline, sekarang dari cdnjs) -->
+<!-- Chart.js + datalabels -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
 </head>
@@ -147,7 +147,7 @@ main{max-width:1000px;margin:0 auto;padding:20px 16px 60px;}
   <!-- INPUT DATA (Day 1-4) -->
   <section class="tab-panel active" id="panel-day4" data-day="day4"></section>
 
-  <!-- Export / Import / Reset (dipindah dari halaman Summary) -->
+  <!-- Export / Import / Reset -->
   <div class="data-tools">
     <button id="btnExport" class="btn btn-secondary">EXPORT DATA</button>
     <label class="btn btn-secondary" for="importFile">IMPORT DATA
@@ -213,12 +213,17 @@ if (LIBS_OK && typeof ChartDataLabels !== 'undefined') {
   Chart.register(ChartDataLabels);
 }
 
+/* Warna per metrik (tidak lagi dipakai grafik gabungan, dibiarkan untuk referensi) */
 const COLOR_VISITOR = '#1565c0';
 const COLOR_BUYER = '#00a99d';
 const COLOR_CHALLENGE = '#0f2942';
 const COLOR_IG = '#c2185b';
 const COLOR_TIKTOK = '#0f2942';
 const COLOR_FB = '#1565c0';
+
+/* Warna per HARI (dipakai di semua metrik pada grafik gabungan).
+   Day 1 hijau, Day 2 oranye, Day 3 biru, Day 4 ungu. Ubah di sini jika ingin warna lain. */
+const DAY_COLORS = ['#2e9e5b', '#f28c28', '#1565c0', '#8e44ad'];
 
 /* ---------------- CLOUDINARY (photo upload) ---------------- */
 const CLOUDINARY_CLOUD_NAME = 'dr9ub0xal';
@@ -424,7 +429,7 @@ async function uploadImageToCloudinary(file) {
 }
 
 /* Strip foto dikenali lewat data-photo-day (bukan id), karena strip yang sama
-   bisa tampil di dua tempat sekaligus (tab TODAY dan tab INPUT DATA). */
+   bisa tampil di dua tempat sekaligus. */
 function photoStripHtml(dayId, record) {
   if (!record) return '';
   const photos = record.photos || [null, null, null];
@@ -449,7 +454,7 @@ function photoSlotHtml(dayId, idx, url) {
     </div>`;
 }
 
-/** Render ulang semua strip foto milik satu hari (di semua tab yang menampilkannya). */
+/** Render ulang semua strip foto milik satu hari. */
 function refreshPhotoStrips(dayId) {
   const photos = (DATA[dayId] && DATA[dayId].photos) || [null, null, null];
   document.querySelectorAll(`.photo-strip[data-photo-day="${dayId}"]`).forEach(strip => {
@@ -503,7 +508,7 @@ function escapeHtml(str) {
   return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-/** Satu kolom highlight di bawah 3 foto, lebarnya mengikuti lebar strip foto. */
+/** Satu kolom highlight di bawah 3 foto. */
 function highlightHtml(dayId, rec) {
   return `
     <div class="highlight-box">
@@ -758,16 +763,15 @@ const stackTotalPlugin = {
   }
 };
 
-/** Satu bar per metrik, tiap bar di-stack per hari. */
+/** Satu bar per metrik, tiap bar di-stack per hari. Warna ditentukan per hari (DAY_COLORS). */
 function buildCombinedStackedChart(canvasId, dayLabels, metrics) {
   if (!LIBS_OK) return null;
   const el = document.getElementById(canvasId);
   if (!el) return null;
-  const alphas = [1, 0.75, 0.55, 0.35];
   const datasets = dayLabels.map((label, dayIdx) => ({
     label,
     data: metrics.map(m => m.values[dayIdx] || 0),
-    backgroundColor: metrics.map(m => hexToRgba(m.color, alphas[dayIdx % alphas.length])),
+    backgroundColor: DAY_COLORS[dayIdx % DAY_COLORS.length],
     borderRadius: dayIdx === dayLabels.length - 1 ? 4 : 0,
     maxBarThickness: 90,
     stack: 'total',
@@ -780,7 +784,7 @@ function buildCombinedStackedChart(canvasId, dayLabels, metrics) {
       plugins: {
         legend: { display: true, position: 'bottom' },
         datalabels: {
-          color: (ctx) => (alphas[ctx.datasetIndex % alphas.length] > 0.6 ? '#fff' : '#1c2b36'),
+          color: '#fff',
           font: { weight: '700', size: 12 },
           formatter: (v) => v > 0 ? v : '',
         }
