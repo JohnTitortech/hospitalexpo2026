@@ -36,6 +36,7 @@ main{max-width:1000px;margin:0 auto;padding:20px 16px 60px;}
 /* FORM */
 .form-box{background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:18px;margin-bottom:24px;}
 .form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:14px;}
+.form-group-title{grid-column:1/-1;margin:6px 0 -4px;padding-top:10px;border-top:1px dashed var(--border);font-size:12px;font-weight:800;letter-spacing:.8px;color:var(--navy);text-transform:uppercase;}
 .field label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px;}
 .field input{width:100%;padding:10px;font-size:16px;border:1px solid var(--border);border-radius:6px;}
 .field input.invalid{border-color:var(--danger);}
@@ -55,11 +56,19 @@ main{max-width:1000px;margin:0 auto;padding:20px 16px 60px;}
 .chart-box-main h3{font-size:16px;}
 .chart-canvas-wrap{position:relative;height:240px;}
 .chart-canvas-wrap-main{height:320px;}
+.chart-canvas-wrap-profile{height:280px;}
 .chart-canvas-wrap canvas{width:100%!important;height:100%!important;}
 .chart-row-2col{display:grid;grid-template-columns:1fr 1fr;gap:18px;}
 @media (max-width:700px){
   .chart-row-2col{grid-template-columns:1fr;}
   .chart-canvas-wrap-main{height:260px;}
+}
+
+/* Baris: bar chart (lebar) + pie chart (sempit) */
+.chart-row-main{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:18px;align-items:stretch;}
+.chart-row-main .chart-box{margin-bottom:18px;}
+@media (max-width:900px){
+  .chart-row-main{grid-template-columns:1fr;}
 }
 
 /* metric strip */
@@ -190,6 +199,7 @@ const DAYS = [
 
 const INPUT_TAB = 'day4'; // panel input untuk semua hari
 
+/* groupTitle = judul sub-bagian yang muncul di form sebelum field ini */
 const FIELDS = [
   { key: 'visitor',   label: 'Booth Visitor' },
   { key: 'ig',        label: 'Instagram' },
@@ -197,13 +207,15 @@ const FIELDS = [
   { key: 'fb',        label: 'Facebook' },
   { key: 'buyer',     label: 'Serious Buyer' },
   { key: 'challenge', label: 'Challenge Story' },
+  { key: 'swasta',    label: 'Swasta', groupTitle: 'Serious Buyer Profile' },
+  { key: 'negeri',    label: 'Negeri' },
 ];
 
 const DEMO_DATA = {
-  day1: { visitor: 89,  ig: 12, tiktok: 8,  fb: 4, buyer: 7,  challenge: 23 },
-  day2: { visitor: 110, ig: 15, tiktok: 10, fb: 5, buyer: 9,  challenge: 31 },
-  day3: { visitor: 135, ig: 20, tiktok: 14, fb: 7, buyer: 12, challenge: 40 },
-  day4: { visitor: 120, ig: 18, tiktok: 11, fb: 6, buyer: 10, challenge: 35 },
+  day1: { visitor: 89,  ig: 12, tiktok: 8,  fb: 4, buyer: 7,  challenge: 23, swasta: 4, negeri: 3 },
+  day2: { visitor: 110, ig: 15, tiktok: 10, fb: 5, buyer: 9,  challenge: 31, swasta: 5, negeri: 4 },
+  day3: { visitor: 135, ig: 20, tiktok: 14, fb: 7, buyer: 12, challenge: 40, swasta: 7, negeri: 5 },
+  day4: { visitor: 120, ig: 18, tiktok: 11, fb: 6, buyer: 10, challenge: 35, swasta: 6, negeri: 4 },
 };
 
 let charts = {};
@@ -213,13 +225,15 @@ if (LIBS_OK && typeof ChartDataLabels !== 'undefined') {
   Chart.register(ChartDataLabels);
 }
 
-/* Warna per metrik (tidak lagi dipakai grafik gabungan, dibiarkan untuk referensi) */
+/* Warna per metrik */
 const COLOR_VISITOR = '#1565c0';
 const COLOR_BUYER = '#00a99d';
 const COLOR_CHALLENGE = '#0f2942';
 const COLOR_IG = '#c2185b';
 const COLOR_TIKTOK = '#0f2942';
 const COLOR_FB = '#1565c0';
+const COLOR_SWASTA = '#f28c28';
+const COLOR_NEGERI = '#00a99d';
 
 /* Warna per HARI (dipakai di semua metrik pada grafik gabungan).
    Day 1 hijau, Day 2 oranye, Day 3 biru, Day 4 ungu. Ubah di sini jika ingin warna lain. */
@@ -295,6 +309,8 @@ async function loadDataFromFirestore() {
         fb: Number(d.fb) || 0,
         buyer: Number(d.buyer) || 0,
         challenge: Number(d.challenge) || 0,
+        swasta: Number(d.swasta) || 0,
+        negeri: Number(d.negeri) || 0,
         photos,
         highlight: typeof d.highlight === 'string' ? d.highlight : localHighlight,
       };
@@ -317,6 +333,7 @@ async function saveDayToFirestore(dayId) {
     await db.collection(DATA_COLLECTION).doc(dayId).set({
       visitor: r.visitor, ig: r.ig, tiktok: r.tiktok,
       fb: r.fb, buyer: r.buyer, challenge: r.challenge,
+      swasta: r.swasta || 0, negeri: r.negeri || 0,
       highlight: r.highlight || '',
     }, { merge: true });
   } catch (err) {
@@ -553,9 +570,15 @@ function renderDayPanel(dayId) {
   const demoBadge = isDemoMode() && visibleDays.length ? `<span class="demo-badge">DEMO DATA</span>` : '';
 
   const chartsHtml = visibleDays.length > 0 ? `
-    <div class="chart-box chart-box-main">
-      <h3>EVENT METRICS</h3>
-      <div class="chart-canvas-wrap chart-canvas-wrap-main"><canvas id="${dayId}CombinedChart"></canvas></div>
+    <div class="chart-row-main">
+      <div class="chart-box chart-box-main">
+        <h3>EVENT METRICS</h3>
+        <div class="chart-canvas-wrap chart-canvas-wrap-main"><canvas id="${dayId}CombinedChart"></canvas></div>
+      </div>
+      <div class="chart-box chart-box-main">
+        <h3>SERIOUS BUYER PROFILE</h3>
+        <div class="chart-canvas-wrap chart-canvas-wrap-main"><canvas id="${dayId}BuyerProfileChart"></canvas></div>
+      </div>
     </div>
   ` : `<div class="no-data-inline">Belum ada data untuk ditampilkan pada grafik. Isi form di bawah untuk memulai.</div>`;
 
@@ -605,6 +628,12 @@ function renderDayPanel(dayId) {
       { name: 'Follower TikTok', values: visibleDays.map(d => DATA[d.id].tiktok), color: COLOR_TIKTOK },
       { name: 'Follower FB', values: visibleDays.map(d => DATA[d.id].fb), color: COLOR_FB },
     ]);
+
+    destroyChart(`${dayId}BuyerProfile`);
+    charts[`${dayId}BuyerProfile`] = buildBuyerProfilePieChart(`${dayId}BuyerProfileChart`, [
+      visibleDays.reduce((s, d) => s + (DATA[d.id].swasta || 0), 0),
+      visibleDays.reduce((s, d) => s + (DATA[d.id].negeri || 0), 0),
+    ]);
   }
 }
 
@@ -630,8 +659,10 @@ function dayFormSectionHtml(panelDayId, targetDay) {
 }
 
 function fieldHtml(scope, field, record) {
-  const val = record ? record[field.key] : '';
+  const val = record && record[field.key] !== undefined ? record[field.key] : '';
+  const groupTitle = field.groupTitle ? `<div class="form-group-title">${field.groupTitle}</div>` : '';
   return `
+    ${groupTitle}
     <div class="field">
       <label for="${scope}-${field.key}">${field.label}</label>
       <input type="number" min="0" step="1" inputmode="numeric"
@@ -798,11 +829,54 @@ function buildCombinedStackedChart(canvasId, dayLabels, metrics) {
   });
 }
 
+/** Pie generik: label, nilai, warna. Menampilkan jumlah + persentase di tiap irisan. */
+function buildPieChart(canvasId, labels, values, colors) {
+  if (!LIBS_OK) return null;
+  const el = document.getElementById(canvasId);
+  if (!el) return null;
+  return new Chart(el, {
+    type: 'pie',
+    data: {
+      labels,
+      datasets: [{
+        data: values,
+        backgroundColor: colors,
+        borderColor: '#fff',
+        borderWidth: 2,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      layout: { padding: 8 },
+      plugins: {
+        legend: { display: true, position: 'bottom' },
+        datalabels: {
+          color: '#fff',
+          font: { weight: '700', size: 12 },
+          textAlign: 'center',
+          formatter: (v, ctx) => {
+            if (!v) return '';
+            const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+            return `${v}\n(${Math.round(v / total * 100)}%)`;
+          }
+        }
+      }
+    }
+  });
+}
+
+/** Pie: Serious Buyer Profile, Swasta vs Negeri (akumulasi semua hari yang terisi). */
+function buildBuyerProfilePieChart(canvasId, values) {
+  return buildPieChart(canvasId, ['Swasta', 'Negeri'], values,
+    [COLOR_SWASTA, COLOR_NEGERI]);
+}
+
 /* ---------------- EXPORT / IMPORT / RESET ---------------- */
 
 function buildExportRows() {
   return DAYS.map(d => {
-    const r = DATA[d.id] || { visitor: '', ig: '', tiktok: '', fb: '', buyer: '', challenge: '' };
+    const r = DATA[d.id] || { visitor: '', ig: '', tiktok: '', fb: '', buyer: '', challenge: '', swasta: '', negeri: '' };
     return {
       Day: d.label,
       Date: d.dateLabel,
@@ -813,6 +887,8 @@ function buildExportRows() {
       TotalFollower: r.visitor === '' ? '' : totalFollower(r),
       SeriousBuyer: r.buyer,
       ChallengeStory: r.challenge,
+      BuyerSwasta: r.swasta === undefined ? '' : r.swasta,
+      BuyerNegeri: r.negeri === undefined ? '' : r.negeri,
     };
   });
 }
@@ -873,6 +949,8 @@ function parseCSV(text) {
       fb: Number(row.Facebook) || 0,
       buyer: Number(row.SeriousBuyer) || 0,
       challenge: Number(row.ChallengeStory) || 0,
+      swasta: Number(row.BuyerSwasta) || 0,
+      negeri: Number(row.BuyerNegeri) || 0,
     };
   }
   return result;
