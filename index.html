@@ -207,15 +207,16 @@ const FIELDS = [
   { key: 'fb',        label: 'Facebook' },
   { key: 'buyer',     label: 'Serious Buyer' },
   { key: 'challenge', label: 'Challenge Story' },
-  { key: 'swasta',    label: 'Swasta', groupTitle: 'Serious Buyer Profile' },
-  { key: 'negeri',    label: 'Negeri' },
+  { key: 'swasta',    label: 'Private', groupTitle: 'Serious Buyer Profile' },
+  { key: 'negeri',    label: 'Gov' },
+  { key: 'medequip',  label: 'Med Equip' },
 ];
 
 const DEMO_DATA = {
-  day1: { visitor: 89,  ig: 12, tiktok: 8,  fb: 4, buyer: 7,  challenge: 23, swasta: 4, negeri: 3 },
-  day2: { visitor: 110, ig: 15, tiktok: 10, fb: 5, buyer: 9,  challenge: 31, swasta: 5, negeri: 4 },
-  day3: { visitor: 135, ig: 20, tiktok: 14, fb: 7, buyer: 12, challenge: 40, swasta: 7, negeri: 5 },
-  day4: { visitor: 120, ig: 18, tiktok: 11, fb: 6, buyer: 10, challenge: 35, swasta: 6, negeri: 4 },
+  day1: { visitor: 89,  ig: 12, tiktok: 8,  fb: 4, buyer: 7,  challenge: 23, swasta: 3, negeri: 2, medequip: 2 },
+  day2: { visitor: 110, ig: 15, tiktok: 10, fb: 5, buyer: 9,  challenge: 31, swasta: 4, negeri: 3, medequip: 2 },
+  day3: { visitor: 135, ig: 20, tiktok: 14, fb: 7, buyer: 12, challenge: 40, swasta: 6, negeri: 4, medequip: 2 },
+  day4: { visitor: 120, ig: 18, tiktok: 11, fb: 6, buyer: 10, challenge: 35, swasta: 5, negeri: 3, medequip: 2 },
 };
 
 let charts = {};
@@ -234,6 +235,7 @@ const COLOR_TIKTOK = '#0f2942';
 const COLOR_FB = '#1565c0';
 const COLOR_SWASTA = '#f28c28';
 const COLOR_NEGERI = '#00a99d';
+const COLOR_MEDEQUIP = '#1565c0';
 
 /* Warna per HARI (dipakai di semua metrik pada grafik gabungan).
    Day 1 hijau, Day 2 oranye, Day 3 biru, Day 4 ungu. Ubah di sini jika ingin warna lain. */
@@ -311,6 +313,7 @@ async function loadDataFromFirestore() {
         challenge: Number(d.challenge) || 0,
         swasta: Number(d.swasta) || 0,
         negeri: Number(d.negeri) || 0,
+        medequip: Number(d.medequip) || 0,
         photos,
         highlight: typeof d.highlight === 'string' ? d.highlight : localHighlight,
       };
@@ -333,7 +336,7 @@ async function saveDayToFirestore(dayId) {
     await db.collection(DATA_COLLECTION).doc(dayId).set({
       visitor: r.visitor, ig: r.ig, tiktok: r.tiktok,
       fb: r.fb, buyer: r.buyer, challenge: r.challenge,
-      swasta: r.swasta || 0, negeri: r.negeri || 0,
+      swasta: r.swasta || 0, negeri: r.negeri || 0, medequip: r.medequip || 0,
       highlight: r.highlight || '',
     }, { merge: true });
   } catch (err) {
@@ -633,6 +636,7 @@ function renderDayPanel(dayId) {
     charts[`${dayId}BuyerProfile`] = buildBuyerProfilePieChart(`${dayId}BuyerProfileChart`, [
       visibleDays.reduce((s, d) => s + (DATA[d.id].swasta || 0), 0),
       visibleDays.reduce((s, d) => s + (DATA[d.id].negeri || 0), 0),
+      visibleDays.reduce((s, d) => s + (DATA[d.id].medequip || 0), 0),
     ]);
   }
 }
@@ -866,17 +870,17 @@ function buildPieChart(canvasId, labels, values, colors) {
   });
 }
 
-/** Pie: Serious Buyer Profile, Swasta vs Negeri (akumulasi semua hari yang terisi). */
+/** Pie: Serious Buyer Profile, Private / Gov / Med Equip (akumulasi semua hari yang terisi). */
 function buildBuyerProfilePieChart(canvasId, values) {
-  return buildPieChart(canvasId, ['Swasta', 'Negeri'], values,
-    [COLOR_SWASTA, COLOR_NEGERI]);
+  return buildPieChart(canvasId, ['Private', 'Gov', 'Med Equip'], values,
+    [COLOR_SWASTA, COLOR_NEGERI, COLOR_MEDEQUIP]);
 }
 
 /* ---------------- EXPORT / IMPORT / RESET ---------------- */
 
 function buildExportRows() {
   return DAYS.map(d => {
-    const r = DATA[d.id] || { visitor: '', ig: '', tiktok: '', fb: '', buyer: '', challenge: '', swasta: '', negeri: '' };
+    const r = DATA[d.id] || { visitor: '', ig: '', tiktok: '', fb: '', buyer: '', challenge: '', swasta: '', negeri: '', medequip: '' };
     return {
       Day: d.label,
       Date: d.dateLabel,
@@ -887,8 +891,9 @@ function buildExportRows() {
       TotalFollower: r.visitor === '' ? '' : totalFollower(r),
       SeriousBuyer: r.buyer,
       ChallengeStory: r.challenge,
-      BuyerSwasta: r.swasta === undefined ? '' : r.swasta,
-      BuyerNegeri: r.negeri === undefined ? '' : r.negeri,
+      BuyerPrivate: r.swasta === undefined ? '' : r.swasta,
+      BuyerGov: r.negeri === undefined ? '' : r.negeri,
+      BuyerMedEquip: r.medequip === undefined ? '' : r.medequip,
     };
   });
 }
@@ -949,8 +954,9 @@ function parseCSV(text) {
       fb: Number(row.Facebook) || 0,
       buyer: Number(row.SeriousBuyer) || 0,
       challenge: Number(row.ChallengeStory) || 0,
-      swasta: Number(row.BuyerSwasta) || 0,
-      negeri: Number(row.BuyerNegeri) || 0,
+      swasta: Number(row.BuyerPrivate ?? row.BuyerSwasta) || 0,
+      negeri: Number(row.BuyerGov ?? row.BuyerNegeri) || 0,
+      medequip: Number(row.BuyerMedEquip) || 0,
     };
   }
   return result;
