@@ -99,7 +99,7 @@ main{max-width:1000px;margin:0 auto;padding:20px 16px 60px;}
 .day-view-select{padding:4px 8px;font-size:12px;font-weight:700;letter-spacing:.5px;border:1px solid var(--border);border-radius:6px;background:#fff;color:var(--navy);cursor:pointer;}
 .highlight-box{margin:0 0 16px;}
 .highlight-box label{display:block;font-size:12px;font-weight:800;letter-spacing:.8px;color:var(--navy);text-transform:uppercase;margin-bottom:6px;}
-.highlight-box textarea{width:100%;min-height:90px;padding:10px;font-size:16px;font-family:inherit;line-height:1.4;border:1px solid var(--border);border-radius:8px;resize:vertical;background:#fff;color:var(--text);}
+.highlight-box textarea{width:100%;min-height:90px;padding:10px;font-size:16px;font-family:inherit;line-height:1.4;border:1px solid var(--border);border-radius:8px;resize:none;overflow:hidden;background:#fff;color:var(--text);}
 .highlight-box .btn{margin-top:8px;padding:8px 14px;font-size:12px;}
 .photo-day-title{margin:12px 0 6px;font-size:13px;color:var(--navy);letter-spacing:.5px;}
 
@@ -533,7 +533,7 @@ function highlightHtml(dayId, rec) {
   return `
     <div class="highlight-box">
       <label for="highlight-${dayId}">Highlight</label>
-      <textarea id="highlight-${dayId}" placeholder="Tulis highlight hari ini...">${escapeHtml(rec.highlight)}</textarea>
+      <textarea id="highlight-${dayId}" placeholder="Tulis highlight hari ini..." oninput="autoGrow(this)">${escapeHtml(rec.highlight)}</textarea>
       <button type="button" class="btn btn-secondary" onclick="saveHighlight('${dayId}')">SIMPAN HIGHLIGHT</button>
     </div>`;
 }
@@ -547,6 +547,12 @@ function saveHighlight(dayId) {
   showToast(`${DAYS.find(d => d.id === dayId).label} highlight saved`);
 }
 
+/** Tinggi kolom highlight otomatis mengikuti isi teks (min-height diatur di CSS). */
+function autoGrow(el) {
+  el.style.height = 'auto';
+  el.style.height = el.scrollHeight + 2 + 'px';
+}
+
 function renderDayView() {
   const box = document.getElementById('dayView');
   if (!box) return;
@@ -555,6 +561,8 @@ function renderDayView() {
   box.innerHTML = rec
     ? metricStripHtml(rec, d.label) + photoStripHtml(d.id, rec) + highlightHtml(d.id, rec)
     : `<div class="no-data-inline">Belum ada data ${d.label}. Isi form di bawah untuk memulai.</div>`;
+  const ta = document.getElementById(`highlight-${d.id}`);
+  if (ta) autoGrow(ta);
 }
 
 /* ---------------- RENDER: INPUT DATA PANEL (Day 1-4) ---------------- */
